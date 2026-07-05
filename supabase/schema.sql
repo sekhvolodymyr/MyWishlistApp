@@ -20,11 +20,15 @@ create table if not exists public.products (
   store_name text not null,
   price text,
   note text,
+  image_url text,
   image_index integer not null default 0,
   reserved boolean not null default false,
   reserved_by text,
   created_at timestamptz not null default now()
 );
+
+alter table public.products
+add column if not exists image_url text;
 
 alter table public.wishlists enable row level security;
 alter table public.products enable row level security;
@@ -67,25 +71,40 @@ using (
 );
 
 drop policy if exists "Anyone can reserve public wishlist products" on public.products;
-create policy "Anyone can reserve public wishlist products"
-on public.products
-for update
-to anon, authenticated
-using (
-  reserved = false
-  and exists (
-    select 1
-    from public.wishlists
-    where wishlists.id = products.wishlist_id
-      and wishlists.is_public = true
-  )
+
+create or replace function public.reserve_product(
+  p_product_id uuid,
+  p_reserver_name text
 )
-with check (
-  reserved = true
-  and exists (
-    select 1
-    from public.wishlists
-    where wishlists.id = products.wishlist_id
-      and wishlists.is_public = true
-  )
-);
+returns public.products
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  reserved_product public.products;
+begin
+  update public.products
+  set
+    reserved = true,
+    reserved_by = nullif(left(trim(p_reserver_name), 80), '')
+  where id = p_product_id
+    and reserved = false
+    and exists (
+      select 1
+      from public.wishlists
+      where wishlists.id = products.wishlist_id
+        and wishlists.is_public = true
+    )
+  returning * into reserved_product;
+
+  if reserved_product.id is null then
+    raise exception 'Product is unavailable for reservation';
+  end if;
+
+  return reserved_product;
+end;
+$$;
+
+revoke all on function public.reserve_product(uuid, text) from public;
+grant execute on function public.reserve_product(uuid, text) to anon, authenticated;

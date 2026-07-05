@@ -505,6 +505,12 @@ nav a {
   width: 500%;
 }
 
+.product-image img.single-product-image {
+  max-width: 100%;
+  transform: none;
+  width: 100%;
+}
+
 .product-card-body {
   display: flex;
   flex-direction: column;

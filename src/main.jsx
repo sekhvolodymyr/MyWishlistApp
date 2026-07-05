@@ -35,6 +35,7 @@ const starterProducts = [
     source_url: "https://shop.example.com/coral-runner",
     price: "$128",
     note: "Size 38, coral or ivory",
+    image_url: "",
     image_index: 0,
     reserved: false,
     reserved_by: "",
@@ -46,6 +47,7 @@ const starterProducts = [
     source_url: "https://shop.example.com/quiet-arc",
     price: "$219",
     note: "Matte black",
+    image_url: "",
     image_index: 1,
     reserved: true,
     reserved_by: "Jessica",
@@ -57,6 +59,7 @@ const starterProducts = [
     source_url: "https://shop.example.com/glow-serum",
     price: "$64",
     note: "Sensitive skin formula",
+    image_url: "",
     image_index: 2,
     reserved: false,
     reserved_by: "",
@@ -97,14 +100,18 @@ function getShareUrl(wishlist) {
   return `${base}/?wishlist=${wishlist.share_token}`;
 }
 
-function ProductImage({ index = 0 }) {
+function ProductImage({ index = 0, imageUrl = "" }) {
   return (
     <div className="product-image" aria-hidden="true">
-      <img
-        src="/assets/product-thumbnails.png"
-        alt=""
-        style={{ transform: `translateX(-${Math.min(index, 4) * 20}%)` }}
-      />
+      {imageUrl ? (
+        <img className="single-product-image" src={imageUrl} alt="" />
+      ) : (
+        <img
+          src="/assets/product-thumbnails.png"
+          alt=""
+          style={{ transform: `translateX(-${Math.min(index, 4) * 20}%)` }}
+        />
+      )}
     </div>
   );
 }
@@ -123,7 +130,7 @@ function ProductCard({ product, onReserve, compact = false }) {
 
   return (
     <article className={`product-card ${compact ? "compact" : ""}`}>
-      <ProductImage index={product.image_index} />
+      <ProductImage index={product.image_index} imageUrl={product.image_url} />
       <div className="product-card-body">
         <div>
           <div className="product-card-topline">
@@ -392,7 +399,7 @@ function Hero({ profile, onAuth, onStart }) {
           <div className="builder-list">
             {starterProducts.map((product) => (
               <div className="builder-row" key={product.id}>
-                <ProductImage index={product.image_index} />
+                <ProductImage index={product.image_index} imageUrl={product.image_url} />
                 <div>
                   <strong>{product.title}</strong>
                   <span>{product.store_name} - {product.price}</span>
@@ -591,14 +598,34 @@ function App() {
 
   async function handleAddProduct(form) {
     setIsSaving(true);
-    const storeName = getStoreName(form.url);
+    let importedProduct = null;
+
+    try {
+      const importResponse = await fetch("/api/import-product", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: form.url }),
+      });
+      const importData = await importResponse.json();
+
+      if (importResponse.ok) {
+        importedProduct = importData;
+      } else {
+        setStatus(importData.error);
+      }
+    } catch {
+      setStatus("Importer unavailable locally. Saving with manual details.");
+    }
+
+    const storeName = importedProduct?.store_name || getStoreName(form.url);
     const nextProduct = {
       id: crypto.randomUUID(),
-      title: form.title || `Wishlist find from ${storeName}`,
-      source_url: form.url,
+      title: form.title || importedProduct?.title || `Wishlist find from ${storeName}`,
+      source_url: importedProduct?.source_url || form.url,
       store_name: storeName,
-      price: form.price || "",
-      note: form.note || "Saved from product URL",
+      price: form.price || importedProduct?.price || "",
+      note: form.note || importedProduct?.note || "Saved from product URL",
+      image_url: importedProduct?.image_url || "",
       image_index: products.length % 5,
       reserved: false,
       reserved_by: "",
@@ -640,13 +667,10 @@ function App() {
     if (!reserver) return;
 
     if (isSupabaseConfigured && !String(productId).startsWith("starter")) {
-      const { data, error } = await supabase
-        .from("products")
-        .update({ reserved: true, reserved_by: reserver })
-        .eq("id", productId)
-        .eq("reserved", false)
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc("reserve_product", {
+        p_product_id: productId,
+        p_reserver_name: reserver,
+      });
 
       if (error) {
         setStatus(`Reservation failed: ${error.message}`);

@@ -7,6 +7,7 @@ Universal wishlist MVP built with React, Vite, Supabase-ready auth/storage, and 
 - Google and Facebook OAuth via Supabase Auth.
 - User cabinet with profile, saved products, wishlist stats, and sign out.
 - Save products from any online store by URL.
+- Server-side product metadata import on Vercel (`/api/import-product`).
 - Persistent cloud storage with Supabase tables when env vars are configured.
 - Local demo mode when Supabase env vars are missing.
 - Public wishlist links via `?wishlist=<share_token>`.
@@ -19,6 +20,12 @@ Universal wishlist MVP built with React, Vite, Supabase-ready auth/storage, and 
 npm install
 cp .env.example .env.local
 npm run dev
+```
+
+For local testing of the server-side product importer, use Vercel dev:
+
+```bash
+vercel dev
 ```
 
 Set these variables in `.env.local` and in Vercel Project Settings:
@@ -41,6 +48,17 @@ VITE_SUPABASE_ANON_KEY=your-supabase-publishable-or-anon-key
    - any custom domain you add later
 
 The frontend uses `supabase.auth.signInWithOAuth({ provider })` for both providers.
+
+## Product Import
+
+Product URL saving calls `/api/import-product`, a Vercel Serverless Function that fetches the store page server-side and extracts:
+
+- Open Graph/Twitter title.
+- Open Graph/Twitter image.
+- Store domain.
+- Common product price metadata or visible price patterns.
+
+Some stores block metadata fetching. In that case, the app keeps the manual fallback and still saves the user-entered URL/title/price/notes.
 
 ## Deploy
 
